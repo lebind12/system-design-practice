@@ -43,7 +43,7 @@ _RE_RPS = re.compile(rf"Requests/sec:\s*({_NUM})")
 _RE_TOTAL = re.compile(rf"Total:\s*({_NUM})\s*secs")
 _RE_PCTL = re.compile(rf"(\d+)%%\s+in\s+({_NUM})\s*secs")
 # "Status code distribution" 섹션의 "[NNN] M responses" 를 모두 잡는다.
-# 2xx/3xx = ok, 4xx/5xx = errors 로 분류 (예: POST 201 Created, GET 302 redirect 도 성공으로 집계)
+# 2xx/3xx = ok, 4xx/5xx = errors 로 분류 (예: POST /shorten=201, GET redirect=302)
 _RE_STATUS_ANY = re.compile(rf"\[(\d{{3}})\]\s*({_NUM})\s*responses")
 _RE_ERROR_LINE = re.compile(rf"\[({_NUM})\]\s+(Get|Post|Put|Delete)\s")
 

@@ -51,7 +51,7 @@
 | # | 책 장 | 챕터 | 디렉토리 | 언어/스택 | 난이도 | 상태 | 노션 |
 |---|---|---|---|---|---|---|---|
 | 0 | 1·2·3 | 규모 확장성·추정·면접 기초 | [scaling-foundations](scaling-foundations/) | Java 17 / Spring Boot 3.3 | ⭐ | ✅ | [📝](https://www.notion.so/33eccedc7709813ba976fcf504b629af) |
-| 1 | 8 | URL 단축기 | `url-shortener` | — | ⭐ | ⬜ | — |
+| 1 | 8 | URL 단축기 | [url-shortener](url-shortener/) | Java 17 / Spring Boot 3.3 | ⭐ | ✅ | [📝](https://www.notion.so/33eccedc7709813394e6ff35655688fc) |
 | 2 | 4 | 처리율 제한 장치 | `rate-limiter` | — | ⭐⭐ | ⬜ | — |
 | 3 | 7 | 분산 유일 ID 생성기 | `unique-id-generator` | — | ⭐⭐ | ⬜ | — |
 | 4 | 5 | 안정 해시 | `consistent-hash` | — | ⭐⭐ | ⬜ | — |
