@@ -36,4 +36,13 @@ public class UrlRepository {
             ps -> ps.setString(1, shortKey),
             rs -> rs.next() ? Optional.of(rs.getString(1)) : Optional.<String>empty());
   }
+
+  public boolean existsByShortKey(String shortKey) {
+    Boolean exists =
+        jdbc.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM urls WHERE short_key = ?)",
+            Boolean.class,
+            shortKey);
+    return Boolean.TRUE.equals(exists);
+  }
 }

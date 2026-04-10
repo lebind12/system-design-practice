@@ -8,15 +8,17 @@ public class UrlService {
 
   private final UrlRepository repo;
   private final UrlCache cache;
+  private final KeyGenerationStrategy keyStrategy;
 
-  public UrlService(UrlRepository repo, UrlCache cache) {
+  public UrlService(UrlRepository repo, UrlCache cache, KeyGenerationStrategy keyStrategy) {
     this.repo = repo;
     this.cache = cache;
+    this.keyStrategy = keyStrategy;
   }
 
   public String shorten(String longUrl) {
     long id = repo.nextId();
-    String shortKey = Base62.encode(id);
+    String shortKey = keyStrategy.generate(id, longUrl);
     repo.insert(new UrlEntry(id, shortKey, longUrl));
     cache.put(shortKey, longUrl);
     return shortKey;

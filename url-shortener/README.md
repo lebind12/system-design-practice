@@ -190,13 +190,51 @@ MVP 의 redirect 경로는 "Postgres unique index lookup" 한 번으로 이미 p
 **4. 고동시성 shorten p99 도 같이 개선됨 (239 → 160 ms, c=500)**
 Throughput 은 사실상 같은데 p99 가 33% 줄었다. 원인: **읽기 경로가 DB 에서 Redis 로 빠져나가면서 DB 가 쓰기 전용에 가까워진 것**. 같은 하드웨어·같은 커넥션 풀에서 DB 가 한 가지 일만 하면 꼬리 지연이 줄어든다. 이게 "캐시는 읽기만 빠르게 만들지 않는다. 쓰기도 덩달아 안정된다" 의 실측 증거다.
 
+### 실험 2 — Hash + 충돌검사 키 전략
+
+**구조**: `KeyGenerationStrategy` 인터페이스 + `@ConditionalOnProperty(app.key-strategy)` 분기. 기본(`base62`) 은 `Base62Strategy` (id → base62), 실험(`hash`) 은 `HashStrategy` (`md5(longUrl + salt).substring(0, 7)` + DB `existsByShortKey` 충돌검사, MAX_RETRIES=5).
+
+#### 함정 1 — 벤치 워크로드와 hash 전략의 궁합 (치명적)
+
+첫 벤치(`VARIANT=hash`, hey, 동일 URL 반복)는 **shorten ok=0, errors=45k+** 로 전부 실패했다. 원인은 전략 자체가 아니라 워크로드:
+
+- hey 는 정적 body 만 지원 → 20초 동안 **같은 longUrl 을 수만 번** 전송
+- hash 전략은 `md5(longUrl + salt)` — 동일 URL 이면 salt 가 같을 때 항상 같은 키
+- salt 집합은 `{"", "::retry-0", ..., "::retry-4"}` 6개뿐 → **키 공간이 사실상 6**
+- 6개 다 쓰이고 나면 모든 후속 요청이 `IllegalStateException` → 500
+
+이건 "hash 전략이 느리다"가 아니라 **"hash 전략은 content-addressed 라서 동일 URL 로 벤치할 수 없다"**. 현실 워크로드는 URL 이 모두 다르므로 이 병목은 존재하지 않는다. 다만 **벤치 하네스가 이 특성을 노출하지 못하는 게 방법론적 함정** 이다.
+
+#### 함정 2 — 도구 asymmetry
+
+고유 URL 벤치를 위해 `bench/run_unique.py` 를 작성했다 (stdlib 만, threading + http.client, hey 호환 포맷 출력). 여기서 두 번째 함정: **hey(Go async) 와 Python threading runner 의 클라이언트 측 오버헤드가 크게 다르다**. c=50 에서 MVP 가 hey 로 7,851 rps, 동일 MVP 를 Python runner 로 재측정하면 **5,205 rps** — 벤치 도구 자체가 33% 의 overhead 를 낸다. 두 전략을 서로 다른 도구로 측정해 비교하면 **도구 차이가 전략 차이를 덮는다**.
+
+해결: MVP 도 고유 URL + Python runner 로 재측정(`VARIANT=mvp-unique`) 해 같은 조건에서 비교.
+
+#### 결과 — 공정 비교 (둘 다 `bench/run_unique.py`, 고유 URL)
+
+| 동시성 | mvp-unique RPS | hash-unique RPS | Δ RPS | mvp-u p99 | hash-u p99 |
+|---:|---:|---:|---:|---:|---:|
+| c=10  | 4,399 | 4,033 | **−8.3%**  | 4.8   | 5.4   |
+| c=50  | 5,205 | 4,654 | **−10.6%** | 28.8  | 36.6  |
+| c=100 | 5,462 | 5,538 | +1.4%      | 60.2  | 69.8  |
+| c=200 | 5,512 | 5,459 | −1.0%      | 128.8 | 153.9 |
+| c=500 | 5,006 | 5,326 | +6.4%      | 314.7 | 292.1 |
+
+#### 해석
+
+1. **hash 전략의 진짜 비용은 저동시성에서만 보인다 (−8~11% RPS, p99 +13~27%)** — 여기서는 extra DB `existsByShortKey` 왕복이 그대로 지연에 합산된다. 벤치 도구가 CPU-bound 가 되지 않는 구간이라 서버 측 상수가 드러남.
+2. **c ≥ 100 부터는 차이가 사라진다** — Python runner 가 클라이언트 측에서 병목이 되어 서버에 여유가 생긴 상태. 전략 차이가 도구 overhead 에 묻힌다.
+3. **초기 hey 측정(−40%)은 잘못된 신호였다** — "도구 + 워크로드 + 전략"의 3중 작용에서 도구·워크로드가 대부분의 차이를 만들었다. 이 경험은 벤치 결과를 볼 때 **항상 (도구, 워크로드, 대상) 을 함께 봐야 한다** 는 교훈.
+4. **책이 왜 Base62 를 권장하는지는 p99 증가보다 _운영 단순성_ 때문** — 8%쯤의 성능 차이보단 "content-addressed 라 동일 URL 중복 처리가 얽히고, 충돌 재시도 로직을 유지해야 하고, 키 공간이 hex 라 Base62 대비 작다(16^7 vs 62^7, 약 **13,000×** 차이)" 가 훨씬 큰 근거다.
+
 ### 실험 진행 상태
 
 | 실험 | 상태 | 핵심 관찰 |
 |---|---|---|
 | MVP (캐시 X, base62) | ✅ 측정 완료 | redirect 18k rps 천장, shorten 7.8k rps 포화 후 퇴보 |
 | 실험1 (Redis 캐시, write-through) | ✅ 측정 완료 | 저동시성 −5%, 고동시성 **+19%**. 캐시는 속도가 아닌 **경합 완화** 도구 |
-| 실험2 (hash 전략) | ⬜ 대기 | 가설: 쓰기 경로에 충돌검사 DB lookup 추가되어 shorten p99 증가 |
+| 실험2 (hash 전략) | ✅ 측정 완료 | 공정 비교 시 −8~11% RPS. 초기 측정이 컸던 건 워크로드·도구 함정 |
 | 실험3 (Bloom filter 중복검사) | ⬜ 대기 | 가설: 쓰기 처리량이 Bloom 비용만큼 감소, 중복 URL 재사용 시 오히려 증가 |
 
 ## 의사결정과 트레이드오프
