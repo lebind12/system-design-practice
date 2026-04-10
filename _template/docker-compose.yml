@@ -1,0 +1,28 @@
+# 이 파일을 복사한 뒤 name 필드를 반드시 챕터 디렉토리명(kebab-case)과 동일하게 변경할 것.
+# Docker Desktop 에서 챕터 단위로 컨테이너가 그룹핑됩니다.
+name: CHANGE_ME_TO_DIRECTORY_NAME
+
+services:
+  # 예시: Redis. 실제 챕터에서 불필요하면 지우고, 필요한 서비스만 남깁니다.
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis-data:/data
+
+  # 예시: PostgreSQL
+  # postgres:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_USER: app
+  #     POSTGRES_PASSWORD: app
+  #     POSTGRES_DB: app
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+
+# volumes:
+#   redis-data:
+#   postgres-data:
