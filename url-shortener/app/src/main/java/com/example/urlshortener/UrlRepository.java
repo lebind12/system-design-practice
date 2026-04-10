@@ -37,6 +37,16 @@ public class UrlRepository {
             rs -> rs.next() ? Optional.of(rs.getString(1)) : Optional.<String>empty());
   }
 
+  public Optional<String> findShortKeyByLongUrl(String longUrl) {
+    return jdbc.query(
+        "SELECT short_key FROM urls WHERE md5(long_url) = md5(?) AND long_url = ? LIMIT 1",
+        ps -> {
+          ps.setString(1, longUrl);
+          ps.setString(2, longUrl);
+        },
+        rs -> rs.next() ? Optional.of(rs.getString(1)) : Optional.<String>empty());
+  }
+
   public boolean existsByShortKey(String shortKey) {
     Boolean exists =
         jdbc.queryForObject(

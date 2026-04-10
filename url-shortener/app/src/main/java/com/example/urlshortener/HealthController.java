@@ -14,11 +14,15 @@ public class HealthController {
   @Value("${app.key-strategy:base62}")
   private String keyStrategy;
 
+  @Value("${app.dedup-mode:off}")
+  private String dedupMode;
+
   @GetMapping("/health")
   public Map<String, Object> health() {
     return Map.of(
         "status", "ok",
         "cacheEnabled", cacheEnabled,
-        "keyStrategy", keyStrategy);
+        "keyStrategy", keyStrategy,
+        "dedupMode", dedupMode);
   }
 }

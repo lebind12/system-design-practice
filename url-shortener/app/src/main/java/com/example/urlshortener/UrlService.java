@@ -9,14 +9,24 @@ public class UrlService {
   private final UrlRepository repo;
   private final UrlCache cache;
   private final KeyGenerationStrategy keyStrategy;
+  private final DedupStrategy dedupStrategy;
 
-  public UrlService(UrlRepository repo, UrlCache cache, KeyGenerationStrategy keyStrategy) {
+  public UrlService(
+      UrlRepository repo,
+      UrlCache cache,
+      KeyGenerationStrategy keyStrategy,
+      DedupStrategy dedupStrategy) {
     this.repo = repo;
     this.cache = cache;
     this.keyStrategy = keyStrategy;
+    this.dedupStrategy = dedupStrategy;
   }
 
   public String shorten(String longUrl) {
+    Optional<String> existing = dedupStrategy.findExistingShortKey(longUrl);
+    if (existing.isPresent()) {
+      return existing.get();
+    }
     long id = repo.nextId();
     String shortKey = keyStrategy.generate(id, longUrl);
     repo.insert(new UrlEntry(id, shortKey, longUrl));

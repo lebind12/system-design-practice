@@ -24,3 +24,4 @@ spring:
 app:
   cache-enabled: ${CACHE_ENABLED:false}
   key-strategy: ${KEY_STRATEGY:base62}
+  dedup-mode: ${DEDUP_MODE:off}
