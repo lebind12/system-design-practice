@@ -15,6 +15,11 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      continue-on-error: false
 
 app:
   cache-enabled: ${CACHE_ENABLED:false}
