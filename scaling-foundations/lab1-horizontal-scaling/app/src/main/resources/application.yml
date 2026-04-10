@@ -1,0 +1,22 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: lab1-app
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:postgres}:5432/${POSTGRES_DB:scaling}
+    username: ${POSTGRES_USER:scaling}
+    password: ${POSTGRES_PASSWORD:scaling}
+    hikari:
+      maximum-pool-size: 20
+      initialization-fail-timeout: -1
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: 6379
+
+app:
+  storage-mode: ${STORAGE_MODE:memory}
+  cache-enabled: ${CACHE_ENABLED:false}
+  instance-id: ${INSTANCE_ID:default}
