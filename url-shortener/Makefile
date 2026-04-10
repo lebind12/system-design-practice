@@ -23,10 +23,12 @@ run-docker:
 test:
 	cd app && ./gradlew test
 
-# 부하/벤치마크 실행. hey 출력은 bench-results/c<동시성>/<시나리오>.txt 로 저장
+# 부하/벤치마크 실행 — VARIANT 환경변수로 시나리오 태그를 분리
+#   make bench VARIANT=mvp     → bench-results/c*/mvp_{shorten,redirect}.txt
+#   make bench VARIANT=cache   → ... cache_{shorten,redirect}.txt
+# 같은 동시성 디렉토리에 여러 VARIANT 가 함께 쌓이면 summarize.py 가 비교 차트를 만든다
 bench:
-	@echo "TODO: write bench scenarios (shorten / redirect, MVP vs cache)"
-	@echo "example: hey -z 30s -c 50 $(APP_URL)/health | tee bench-results/c50/health.txt"
+	VARIANT=$(or $(VARIANT),mvp) ./bench/run.sh
 
 viz:
 	@python3 bench/summarize.py

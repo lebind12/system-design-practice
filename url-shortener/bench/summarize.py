@@ -42,7 +42,9 @@ _NUM = r"[0-9]+\.?[0-9]*"
 _RE_RPS = re.compile(rf"Requests/sec:\s*({_NUM})")
 _RE_TOTAL = re.compile(rf"Total:\s*({_NUM})\s*secs")
 _RE_PCTL = re.compile(rf"(\d+)%%\s+in\s+({_NUM})\s*secs")
-_RE_STATUS_200 = re.compile(rf"\[200\]\s*({_NUM})\s*responses")
+# "Status code distribution" 섹션의 "[NNN] M responses" 를 모두 잡는다.
+# 2xx/3xx = ok, 4xx/5xx = errors 로 분류 (예: POST /shorten=201, GET redirect=302)
+_RE_STATUS_ANY = re.compile(rf"\[(\d{{3}})\]\s*({_NUM})\s*responses")
 _RE_ERROR_LINE = re.compile(rf"\[({_NUM})\]\s+(Get|Post|Put|Delete)\s")
 
 
@@ -66,11 +68,19 @@ def parse_file(path: Path) -> dict:
         if pct in (50, 75, 90, 95, 99):
             out[f"p{pct}"] = secs * 1000.0
 
-    m = _RE_STATUS_200.search(text)
-    if m:
-        out["ok"] = int(float(m.group(1)))
+    # Status code 분포를 모두 수집하여 2xx/3xx=ok, 4xx/5xx=errors 로 분류
+    ok_total = 0
+    status_err_total = 0
+    for sm in _RE_STATUS_ANY.finditer(text):
+        code = int(sm.group(1))
+        n = int(float(sm.group(2)))
+        if 200 <= code < 400:
+            ok_total += n
+        else:
+            status_err_total += n
+    out["ok"] = ok_total
 
-    err_total = 0
+    err_total = status_err_total
     in_err_block = False
     for line in text.splitlines():
         if line.strip().startswith("Error distribution"):
