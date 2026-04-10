@@ -24,4 +24,8 @@ vendor/
 # Benchmarks output
 *.pprof
 *.prof
-bench-results/
+# 원시 hey 출력 디렉토리 (c50/, c500/, c1000/, c1000-tuned/, ...) 는 재현 가능하므로 제외
+bench-results/c[0-9]*/
+# summarize.py 가 매 viz 때마다 덮어쓰므로 커밋하면 스팸. 수치는 챕터 README 에 박제됨
+bench-results/summary.*
+# bench-results/charts/*.svg 는 추적됨 — 포트폴리오 뷰에서 렌더

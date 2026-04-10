@@ -1,0 +1,88 @@
+name: scaling-foundations
+
+# 4-stage horizontal scaling lab. stage 별로 어떤 서비스가 켜지는지는
+# Compose profiles 로 토글한다. Makefile 의 stage<n> 타겟이 환경 변수와
+# COMPOSE_PROFILES 를 함께 설정해 호출한다.
+#
+#   stage1: app1 (in-memory)
+#   stage2: app1 + postgres
+#   stage3: app1 + app2 + postgres + nginx
+#   stage4: app1 + app2 + postgres + nginx + redis
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["stage2", "stage3", "stage4"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./lab1-horizontal-scaling/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["stage4"]
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+
+  app1:
+    build: ./lab1-horizontal-scaling/app
+    profiles: ["stage1", "stage2", "stage3", "stage4"]
+    environment:
+      INSTANCE_ID: app1
+      STORAGE_MODE: ${STORAGE_MODE:-memory}
+      CACHE_ENABLED: ${CACHE_ENABLED:-false}
+      SPRING_AUTOCONFIGURE_EXCLUDE: ${SPRING_EXCLUDE:-}
+      # Spring Boot 는 SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE 환경 변수를
+      # spring.datasource.hikari.maximum-pool-size 속성에 자동 매핑한다.
+      # HIKARI_POOL_SIZE 변수는 Makefile 의 stage/bench 타겟이 stage 별로 설정.
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${HIKARI_POOL_SIZE:-20}
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      REDIS_HOST: redis
+    ports:
+      - "18081:8080"
+
+  app2:
+    build: ./lab1-horizontal-scaling/app
+    profiles: ["stage3", "stage4"]
+    environment:
+      INSTANCE_ID: app2
+      STORAGE_MODE: ${STORAGE_MODE:-jdbc}
+      CACHE_ENABLED: ${CACHE_ENABLED:-false}
+      SPRING_AUTOCONFIGURE_EXCLUDE: ${SPRING_EXCLUDE:-}
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${HIKARI_POOL_SIZE:-20}
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      REDIS_HOST: redis
+    ports:
+      - "18082:8080"
+
+  nginx:
+    image: nginx:1.27-alpine
+    profiles: ["stage3", "stage4"]
+    volumes:
+      - ./lab1-horizontal-scaling/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "18080:80"
+
+volumes:
+  postgres-data:

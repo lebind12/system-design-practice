@@ -1,3 +1,7 @@
 .env
-bench-results/
+# 원시 hey 출력 디렉토리 (c50/, c500/, ...) 는 재현 가능
+bench-results/c[0-9]*/
+# summarize.py 가 매번 덮어쓰므로 커밋하면 스팸
+bench-results/summary.*
+# charts/*.svg 는 계속 커밋 — 포트폴리오 뷰에서 렌더됨
 *.log
