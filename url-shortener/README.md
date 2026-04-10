@@ -283,16 +283,36 @@ Hit 케이스는 shorten 이 사실상 **read-only 경로** 가 된다. `nextval
 
 ## 의사결정과 트레이드오프
 
-- (구현 진행하며 채움)
+- **302 대신 301 을 쓰면 모든 벤치가 의미 없어진다.** 브라우저가 301 을 강하게 캐싱해 두 번째 클릭부터 서버를 타지 않기 때문. 읽기 경로 측정을 원하면 302 를 유지해야 한다는 것이 코드보다 먼저 결정되어야 하는 사항이었다.
+- **Unique ID 는 DB sequence 로 충분했다.** 책은 분산 unique ID 생성기(Snowflake 등, 7장 주제) 를 전제로 하지만, 단일 노드 측정에선 `SELECT nextval` 이 더 단순하고 빨랐다. 분산 ID 생성기의 가치는 "쓰기 경로가 여러 DB 에 분산될 때 ID 조정 비용" 에서 나오는데, 이 챕터는 그 지점까지 가지 않는다.
+- **캐시는 write-through 를 선택했다.** cache-aside 면 저동시성 shorten 의 −20% 오버헤드가 사라지지만, 방금 단축한 URL 의 첫 클릭이 항상 DB 로 간다. "공유 직후 트래픽이 터지는" 워크로드 가정을 따랐다. 이게 바뀌면 cache-aside 가 더 맞다.
+- **Dedup 은 hit rate 가 없으면 순손해다.** 실측으로는 hit rate 20% 이상에서 손익분기. 워크로드를 모르는 상태에서 켜면 안 되는 스위치.
+- **Hash 전략은 운영상 거의 항상 손해다.** 성능 차이(−8~11%)보다 키 공간 차이(62^7 vs 16^7, **13,000×**) 와 충돌 재시도 로직의 유지 비용이 더 크다. Base62 가 "더 빠르다" 보다 "더 단순하다" 가 채택 이유.
 
 ## 막힌 지점과 해결
 
-- (구현 진행하며 채움)
+- **하네스 파서가 `[200]` 만 인식했다.** `POST /shorten` 의 201 과 `GET /{key}` 의 302 가 전부 "empty result" 로 집계되어 첫 벤치가 summary 를 못 만들었다. `[NNN]` 패턴을 일반화해 2xx/3xx=ok, 4xx/5xx=errors 로 재분류. `_template/bench/summarize.py` 에도 백포트해 다음 챕터에서 같은 함정을 안 밟도록 했다.
+- **Hash 전략 첫 벤치가 모조리 500.** 원인이 전략이 아니라 **벤치 워크로드**. hey 는 정적 body 만 지원 → 같은 URL 을 반복 전송 → content-addressed hash 는 salt 6개 순환 후 `IllegalStateException`. 전략의 버그가 아니라 "이런 전략은 이런 벤치로 못 잰다" 는 교훈.
+- **고유 URL 벤치 도구를 직접 써야 했다.** `wrk` 가 설치돼 있지 않아 stdlib 만으로 `bench/run_unique.py` 작성(threading + http.client, hey 호환 포맷 출력). 이 도구는 실험 3 (dedup miss case) 에서도 재사용 — 비용 대비 재사용성이 좋았다.
+- **도구 asymmetry 로 hash 비교가 왜곡됐다.** hey(Go async) 로 잰 MVP 와 Python runner 로 잰 hash 를 직접 비교하면 hash 가 40% 느린 것처럼 보였다. 실제론 Python runner 자체가 MVP 에서도 33% 낮은 throughput 을 낸다. MVP 를 같은 runner 로 재측정해야 전략 비교가 의미 있었다.
+- **DbDedup 의 `?` 두 개를 한 개만 바인딩.** `SELECT ... WHERE md5(long_url) = md5(?) AND long_url = ?` SQL 에 placeholder 가 2개인데 `ps.setString(1, longUrl)` 만 호출 → 첫 벤치 전부 500 with `No value specified for parameter 2`. Spring JdbcTemplate 이 placeholder 개수를 컴파일 타임에 검증해주면 좋았겠지만 런타임 오류. 양쪽 다 같은 값이라 `ps.setString(1, longUrl); ps.setString(2, longUrl);` 로 수정.
+- **IntelliJ 의 non-project file 경고 무시하고 진행해도 됐다.** 이 저장소의 Java 는 IDE 가 프로젝트로 인식하지 않지만 Docker gradle 빌드는 독립적으로 동작. "에러" 처럼 보이는 경고에 휘둘리지 않는 것도 경험.
 
 ## 배운 것
 
-- (구현 진행하며 채움)
+- **책의 11,600 rps 는 단일 노드 한계가 아니다.** 노트북 한 대의 Spring Boot + PostgreSQL 이 redirect 18k rps / shorten 7.8k rps 를 낸다. 책의 스케일 가정은 "이 숫자를 단일 노드가 못 내서 분산이 필요" 가 아니라, **분산 패턴(샤딩·복제·LB)을 연습시키기 위한 교보재** 로 읽는 게 맞다. 가용성·지리 분산·격리는 별개의 이유.
+- **캐시는 빠르게 만드는 도구가 아니라 경합 관리 도구다.** 저동시성에선 Redis 한 hop 이 순손해(−5%), 고동시성에선 DB 경합을 비껴내 RPS +19% / p99 −18%. _"캐시는 hit ratio 높이는 게 목적이다"_ 와 _"캐시는 DB 부하를 줄이는 게 목적이다"_ 는 같은 말인데, 후자로 외워야 저동시성의 역효과를 오해하지 않는다.
+- **캐시는 읽기만 빠르게 만들지 않는다. 쓰기도 안정된다.** c=500 에서 shorten p99 가 239ms → 160ms 로 떨어졌다. 읽기가 DB 에서 빠져나가면 DB 가 쓰기 전용에 가까워져 꼬리 지연이 줄어든다. 이건 dedup 실험의 "shorten 을 read 로 바꾼다" 와 같은 방향 — **가장 빠른 DB 조작은 하지 않는 조작**.
+- **Base62 vs Hash 의 진짜 논점은 성능이 아니라 운영 단순성.** 성능은 5-10% 차이지만 키 공간은 13,000×, 거기에 충돌 재시도 로직 유지·동일 URL 처리 분기·salt 전략 결정 등 운영 복잡도가 합쳐진다. 책이 Base62 를 권하는 이유는 "더 빠르다" 가 아니라 "덜 고민해도 된다".
+- **Dedup 의 가치는 전적으로 hit rate 에 종속된다.** 0% hit 이면 -23%, 100% hit 이면 +164%. 워크로드를 모른 채 켜면 도박. 그래서 Bloom filter 가 필요한 지점이 있다 — miss 케이스의 오버헤드를 거의 0 으로 만들어 "hit rate 가 낮아도 손해는 없고 hit rate 가 높으면 이득" 으로 비대칭을 만든다.
+- **벤치 도구도 측정 대상이다.** hey vs Python stdlib runner 는 클라이언트 측 오버헤드 차이로 33% RPS 를 만든다. "전략 A 가 B 보다 40% 느리다" 가 실제로는 도구 차이일 수 있다. 벤치 결과를 볼 땐 _항상_ (도구, 워크로드, 대상) 3자를 같이 봐야 한다 — 이 챕터에서 가장 강하게 배운 교훈.
+- **Docker 컨테이너를 재빌드하지 않고 플래그만으로 실험 간 전환할 수 있게 설계한 게 결정적이었다.** `CACHE_ENABLED`, `KEY_STRATEGY`, `DEDUP_MODE` 세 env 변수로 같은 바이너리에서 4가지 조합을 돌릴 수 있었다. 실험 5개를 돌리는 동안 재빌드는 4번만 (전략 변경 시). `@ConditionalOnProperty` 로 bean 분기하는 Spring 패턴이 이 용도에 딱 맞았다.
 
 ## 다음에 시도할 것
 
-- (구현 진행하며 채움)
+- **Bloom filter 로 dedup miss 경로 최적화.** 이 챕터의 빈칸. `dedup-unique` 의 −23% 가 거의 0 으로 떨어지는지 확인. Guava `BloomFilter` 쓰거나 stdlib 으로 직접 구현. false positive rate 0.01 이면 미기여 미미, 0.001 이면 메모리 8배 쓰면서 얼마나 나아지는지.
+- **Cache-aside vs write-through 비교.** 저동시성 shorten 의 −20% 오버헤드가 cache-aside 로 사라지는지, 첫 redirect 의 miss 지연이 얼마나 되는지.
+- **수평 확장 — 앱 2 인스턴스 + nginx LB.** scaling-foundations 의 교훈(keepalive, worker_connections) 을 재사용. 단일 노드 18k 천장이 어디까지 올라가는지, Postgres 가 먼저 무너지는지.
+- **DB 샤딩 (short_key 첫 2자 기준).** 단일 Postgres 한계까지 가는 실험. 샤드 간 커넥션 풀 관리가 어떻게 복잡해지는지.
+- **Bench 도구 신뢰성 평가.** 같은 조건에서 hey / wrk / Python runner / oha 의 RPS 차이를 표로. 어느 도구가 언제 쓰기 좋은지 챕터 간 재사용 가능한 가이드로 정리.
+- **k6 로 재측정.** k6 는 단일 바이너리에 JS 시나리오, 분포 있는 워크로드(일부 URL 은 hit, 나머지는 miss) 구성이 쉬움. dedup 의 실제 break-even hit rate 를 곡선으로 그릴 수 있다.
