@@ -1,0 +1,14 @@
+.env
+# 원시 hey 출력 디렉토리 (c50/, c500/, c1000/, c1000-tuned/, ...) 는 재현 가능
+bench-results/c[0-9]*/
+# summarize.py 가 매번 덮어쓰므로 커밋하면 스팸. 수치는 README 에 박제
+bench-results/summary.*
+# charts/*.svg 는 계속 커밋 — 포트폴리오 뷰에서 렌더됨
+*.log
+.DS_Store
+
+# Java / Gradle
+**/build/
+**/.gradle/
+**/out/
+*.class
