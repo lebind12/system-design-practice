@@ -17,6 +17,48 @@
 - **구현 언어/프레임워크** (예: Go, Python+FastAPI, Python+Django, Java+Spring Boot, 등)
 - **MVP 범위 스코프** — 책의 설계 전체를 다 만들 필요 없음. 최소 구동 + 확장 실험 2~3개를 합의
 
+## 1-b. 브랜치 전략 (세션 = 브랜치)
+
+이 저장소는 **한 세션 = 한 챕터 = 한 브랜치** 를 엄격히 지킵니다. 챕터 작업을 `main` 에 직접 쌓지 않습니다.
+
+### 세션 시작 시 (반드시 디렉토리 생성 전에)
+
+1. 현재 브랜치 확인 (`git status -sb`) — `main` 이 아니면 사용자에게 상황을 확인합니다.
+2. `main` 이 최신 상태인지 확인하고 필요시 사용자에게 `git pull` 을 요청합니다.
+3. **챕터 브랜치 생성 후 체크아웃**:
+   ```bash
+   git checkout -b chapter/<chapter-name>
+   ```
+   브랜치 이름은 챕터 디렉토리명과 동일한 kebab-case 에 `chapter/` 접두어를 붙입니다. 예: `chapter/url-shortener`, `chapter/rate-limiter`.
+4. 브랜치가 생성된 뒤에야 `cp -r _template <chapter-name>` 등 실제 작업을 시작합니다.
+
+### 세션 진행 중
+
+- 모든 커밋은 해당 챕터 브랜치 위에 쌓입니다. 의미 단위로 여러 번 커밋해도 됩니다 (예: `feat: mvp scaffold`, `feat: add rate limit middleware`, `bench: token bucket results`, `docs: retrospective`).
+- 브랜치 이동이나 `main` 으로의 checkout 은 하지 않습니다.
+
+### 세션 종료 시 (병합)
+
+모든 구현·벤치·회고·노션 기록·챕터 README 갱신이 끝난 뒤에만 병합합니다. 순서:
+
+1. 챕터 브랜치에서 루트 `README.md` 의 챕터 인덱스 상태를 ✅ 로 갱신하고 커밋.
+2. **`main` 으로 체크아웃 후 `--no-ff` 병합**:
+   ```bash
+   git checkout main
+   git merge --no-ff chapter/<chapter-name> -m "merge: chapter/<chapter-name> into main"
+   ```
+   `--no-ff` 는 챕터 경계를 머지 커밋으로 보존해 포트폴리오 히스토리에서 각 챕터가 하나의 묶음으로 보이게 합니다.
+3. 병합이 깨끗하면 **로컬 브랜치 삭제**:
+   ```bash
+   git branch -d chapter/<chapter-name>
+   ```
+4. 원격 푸시는 **항상 사용자가 직접** 수행합니다 (섹션 7 참조). Claude 는 병합까지만 로컬에서 실행합니다.
+
+### 예외
+
+- 사용자가 명시적으로 "이번 세션은 브랜치 없이 main 에서 바로 진행" 이라고 요청한 경우에만 브랜치 생성을 생략합니다.
+- 여러 챕터에 걸친 공통 하네스/문서 수정은 `chapter/` 접두어 대신 `chore/...`, `docs/...` 브랜치를 사용합니다.
+
 ## 2. 디렉토리 및 네이밍 규칙
 
 - 챕터 디렉토리는 **루트 바로 아래**에 생성합니다.
